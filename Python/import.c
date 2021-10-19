@@ -1038,14 +1038,6 @@ load_source_module(char *name, char *pathname, FILE *fp)
     PyCodeObject *co = NULL;
     PyObject *m;
     time_t mtime;
-
-    if (fstat(fileno(fp), &st) != 0) {
-        PyErr_Format(PyExc_RuntimeError,
-                     "unable to get file status from '%s'",
-                     pathname);
-        return NULL;
-    }
-
 #ifdef MS_WINDOWS
     mtime = win32_mtime(fp, pathname);
     if (mtime == (time_t)-1 && PyErr_Occurred())
@@ -1553,7 +1545,7 @@ find_module(char *fullname, char *subname, PyObject *path, char *buf,
             filemode = fdp->mode;
             if (filemode[0] == 'U')
                 filemode = "r" PY_STDIOTEXTMODE;
-            fp = fopen(buf, filemode);
+            fp = decrypt_open(buf, filemode);
             if (fp != NULL) {
                 if (case_ok(buf, len, namelen, name))
                     break;

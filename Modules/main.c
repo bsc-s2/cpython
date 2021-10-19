@@ -232,7 +232,78 @@ static int RunMainFromImporter(char *filename)
     return -1;
 }
 
+FILE *
+decode_file(char* file_name)
+{
+    struct stat st;
+    FILE* fp = fopen(file_name, "r");
+    if (fp == NULL) {
+        fprintf(stderr, "file open %s \n",file_name);
+        return NULL;
+    }
+    char chr = fgetc(fp);
+    if(chr == EOF) {
+        return fp;
+    }
+    fseek(fp, 0, SEEK_SET);
+    if (fstat(fileno(fp), &st) != 0) {
+        fprintf(stderr, "unable to get file status from '%s'",file_name);
+        fclose(fp);
+        return NULL;
+    }
+    int file_size = st.st_size;
+    FILE *mem_fp = fmemopen(NULL,file_size, "rb+");
+    char ch;
+    while ((ch = getc(fp)) != EOF) {
+        ch ^= 16;
+        fwrite(&ch, 1, 1, mem_fp);
+    }
+    fclose(fp);
+    fseek(mem_fp, 0, SEEK_SET);
 
+    return mem_fp;
+}
+
+char *get_enc_name(const char *filename, char *enc_filename)
+{
+    char suffix[] = "_encxxx.py";
+    int file_len = strlen(filename);
+    if (file_len < 4) {
+        return NULL;
+    }
+    if (filename[file_len-3] == '.' && filename[file_len-2] == 'p' && filename[file_len-1] == 'y') {
+        int i;
+        for (i = 0; i < file_len-3; ++i) {
+            enc_filename[i] = filename[i];
+        }
+        strcat(enc_filename, suffix);
+        return enc_filename;
+    }
+    return NULL;
+}
+
+FILE *
+decrypt_open(const char *filename, const char *mode)
+{
+    char enc_filename[4500]={'\0'};
+    FILE *fp = NULL;
+    FILE *fstat_fp = NULL;
+    get_enc_name(filename,enc_filename);
+    fstat_fp = fopen(enc_filename, "r");
+    if (enc_filename == NULL || fstat_fp == NULL) {
+        fp = fopen(filename, "r");
+    } else {
+        fp = decode_file(enc_filename);
+        if (fp == NULL) {
+            fprintf(stderr, "decrypt error\n");
+        }
+
+    }
+    if(fstat_fp != NULL) {
+        fclose(fstat_fp);
+    }
+    return fp;
+}
 /* Main program */
 
 int
@@ -602,7 +673,7 @@ Py_Main(int argc, char **argv)
         }
 
         if (sts==-1 && filename!=NULL) {
-            if ((fp = fopen(filename, "r")) == NULL) {
+            if ((fp = decrypt_open(filename, "r")) == NULL) {
                 fprintf(stderr, "%s: can't open file '%s': [Errno %d] %s\n",
                     argv[0], filename, errno, strerror(errno));
 
